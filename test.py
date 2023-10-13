@@ -66,7 +66,7 @@ if __name__ == '__main__':
             gradients_list = manager.list()
             loss_list = manager.list()
 
-            # Divide the data_batch and target_batch into 4 smaller batches
+            # Divide the data_batch and target_batch into smaller batches // again simulating DDP
             data_sub_batches = divide_into_sub_batches(data_batch, num_sub_batches)
             target_sub_batches = divide_into_sub_batches(target_batch, num_sub_batches)
 
