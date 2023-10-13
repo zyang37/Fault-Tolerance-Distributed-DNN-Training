@@ -6,6 +6,7 @@ import torch.optim as optim
 from torch.multiprocessing import Process, Manager
 from torch.utils.data import DataLoader, TensorDataset
 
+# Set seed for reproducibility
 seed_value = 1
 random.seed(seed_value)
 np.random.seed(seed_value)
@@ -27,7 +28,7 @@ def generate_data(num_samples):
     y = x ** 3
     return torch.tensor(x, dtype=torch.float32).view(-1, 1), torch.tensor(y, dtype=torch.float32).view(-1, 1)
 
-# Divide a tensor into smaller batches
+# Divide a tensor into a specific number of sub-batches
 def divide_into_sub_batches(tensor, num_sub_batches):
     sub_batch_size = tensor.size(0) // num_sub_batches
     return [tensor[i:i + sub_batch_size] for i in range(0, tensor.size(0), sub_batch_size)]
@@ -50,14 +51,14 @@ if __name__ == '__main__':
 
     # Create DataLoader
     dataset = TensorDataset(x_data, y_data)
-    data_loader = DataLoader(dataset, batch_size=50, shuffle=True)
+    data_loader = DataLoader(dataset, batch_size=40, shuffle=True)
 
     # Initialize global model and optimizer
     global_model = SimpleModel()
     optimizer = optim.SGD(global_model.parameters(), lr=0.01)
 
     n_epochs = 5  # Number of epochs
-    subdata_batches = 2  # Number of smaller data batches
+    num_sub_batches = 4  # Number of smaller data batches
 
     for epoch in range(n_epochs):
         epoch_loss_list = []
@@ -66,8 +67,8 @@ if __name__ == '__main__':
             loss_list = manager.list()
 
             # Divide the data_batch and target_batch into 4 smaller batches
-            data_sub_batches = divide_into_sub_batches(data_batch, subdata_batches)
-            target_sub_batches = divide_into_sub_batches(target_batch, subdata_batches)
+            data_sub_batches = divide_into_sub_batches(data_batch, num_sub_batches)
+            target_sub_batches = divide_into_sub_batches(target_batch, num_sub_batches)
 
             processes = []
             for data_sub_batch, target_sub_batch in zip(data_sub_batches, target_sub_batches):
