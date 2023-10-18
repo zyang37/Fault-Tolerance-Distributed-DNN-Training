@@ -1,11 +1,11 @@
 # Updates & Notes
 
 **[TODOs]**
-- [ ] Make a sequnatil version of the DDP program. 
-- [ ] Create a module for the attacking gradients. 
-- [ ] Create a module for aggregating gradients algorithm (as placeholder for various aggregating rules for now). 
-- [ ] Create a Pytoch dataloader for a simple dataset.
-- [ ] 
+- [x] Make a sequnatil version of the DDP program. 
+- [x] Create a module for the attacking gradients. 
+- [x] Create a module for aggregating gradients algorithm (as placeholder for various aggregating rules for now). 
+- [x] Create a Pytoch dataloader for a simple dataset.
+- [x] Create a model.py file as a placehoder for various DNN models.
 
 <br>
 
