@@ -1,5 +1,8 @@
 # Updates & Notes
 
+**[Notes]**
+- Work under a dev branch, and then merge to the master branch later. 
+
 **[TODOs]**
 - [ ] Add some instructions on how to run the code.
 - [ ] Make a sequnatil version of the DDP program. 
