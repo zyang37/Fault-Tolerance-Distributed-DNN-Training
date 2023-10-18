@@ -1,6 +1,7 @@
 # Updates & Notes
 
 **[TODOs]**
+- [ ] Add some instructions on how to run the code.
 - [ ] Make a sequnatil version of the DDP program. 
 - [ ] Create a module for the attacking gradients. 
 - [ ] Create a module for aggregating gradients algorithm (as placeholder for various aggregating rules for now). 
