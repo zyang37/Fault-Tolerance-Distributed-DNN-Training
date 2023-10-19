@@ -17,11 +17,6 @@ torch.manual_seed(seed_value)
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 
-# # Generate data
-# def generate_data(num_samples):
-#     x = np.linspace(-1, 1, num_samples)
-#     y = x ** 3
-#     return torch.tensor(x, dtype=torch.float32).view(-1, 1), torch.tensor(y, dtype=torch.float32).view(-1, 1)
 
 # Divide a tensor into a specific number of sub-batches
 def divide_into_sub_batches(tensor, num_sub_batches):
@@ -51,7 +46,6 @@ if __name__ == '__main__':
     # Initialize global model and optimizer
     global_model = build_model(arch="simplemodel", class_number=1)
     optimizer = optim.SGD(global_model.parameters(), lr=0.01)
-
 
     for epoch in range(n_epochs):
         epoch_loss_list = []
