@@ -41,6 +41,9 @@ def worker(model, data, target, gradients_list, loss_list, optimizer):
 if __name__ == '__main__':
     manager = Manager()
 
+    n_epochs = 5  # Number of epochs
+    num_sub_batches = 4  # Number of smaller data batches, also equal to the number of worker
+
     # Create DataLoader
     num_samples = 200
     data_loader = dummy_dataloader(f=lambda x: x ** 3, num_samples=num_samples)
@@ -49,8 +52,6 @@ if __name__ == '__main__':
     global_model = build_model(arch="simplemodel", class_number=1)
     optimizer = optim.SGD(global_model.parameters(), lr=0.01)
 
-    n_epochs = 5  # Number of epochs
-    num_sub_batches = 4  # Number of smaller data batches
 
     for epoch in range(n_epochs):
         epoch_loss_list = []
