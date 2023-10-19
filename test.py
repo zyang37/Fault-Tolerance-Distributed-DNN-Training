@@ -6,6 +6,8 @@ import torch.optim as optim
 from torch.multiprocessing import Process, Manager
 from torch.utils.data import DataLoader, TensorDataset
 
+from models import build_model
+
 # Set seed for reproducibility
 seed_value = 1
 random.seed(seed_value)
@@ -14,14 +16,14 @@ torch.manual_seed(seed_value)
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
 
-# Define model
-class SimpleModel(nn.Module):
-    def __init__(self):
-        super(SimpleModel, self).__init__()
-        self.fc = nn.Linear(1, 1)
+# # Define model
+# class SimpleModel(nn.Module):
+#     def __init__(self):
+#         super(SimpleModel, self).__init__()
+#         self.fc = nn.Linear(1, 1)
 
-    def forward(self, x):
-        return self.fc(x)
+#     def forward(self, x):
+#         return self.fc(x)
 
 def generate_data(num_samples):
     x = np.linspace(-1, 1, num_samples)
@@ -54,7 +56,7 @@ if __name__ == '__main__':
     data_loader = DataLoader(dataset, batch_size=40, shuffle=True)
 
     # Initialize global model and optimizer
-    global_model = SimpleModel()
+    global_model = build_model(arch="simplemodel", class_number=1)
     optimizer = optim.SGD(global_model.parameters(), lr=0.01)
 
     n_epochs = 5  # Number of epochs
