@@ -13,6 +13,14 @@
 
 <br>
 
+**[10-19-2023]**
+<details>
+  <summary> updates  </summary>
+
+- [Test] Modulized the model and dataloader. Many models are added to the model.py file to support classification tasks. And the current dataloader only a dummy dataloader which generates data for a given function. 
+
+</details>
+
 **[10-13-2023]**
 <details>
   <summary> ZY's updates  </summary>
