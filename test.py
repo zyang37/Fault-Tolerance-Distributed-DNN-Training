@@ -4,7 +4,10 @@ import numpy as np
 import torch.nn as nn
 import torch.optim as optim
 from torch.multiprocessing import Process, Manager
-from torch.utils.data import DataLoader, TensorDataset
+# from torch.utils.data import DataLoader, TensorDataset
+
+from models import build_model
+from dataloaders import dummy_dataloader
 
 # Set seed for reproducibility
 seed_value = 1
@@ -13,22 +16,6 @@ np.random.seed(seed_value)
 torch.manual_seed(seed_value)
 torch.backends.cudnn.deterministic = True
 torch.backends.cudnn.benchmark = False
-
-
-# Define model
-class SimpleModel(nn.Module):
-    def __init__(self):
-        super(SimpleModel, self).__init__()
-        self.fc = nn.Linear(1, 1)
-
-    def forward(self, x):
-        return self.fc(x)
-
-
-def generate_data(num_samples):
-    x = np.linspace(-1, 1, num_samples)
-    y = x ** 3
-    return torch.tensor(x, dtype=torch.float32).view(-1, 1), torch.tensor(y, dtype=torch.float32).view(-1, 1)
 
 
 # Divide a tensor into a specific number of sub-batches
@@ -51,18 +38,13 @@ def worker(model, data, target, gradients_list, loss_list, optimizer):
 if __name__ == '__main__':
     manager = Manager()
 
-    num_samples = 200
-    x_data, y_data = generate_data(num_samples)
     # Create DataLoader
-    dataset = TensorDataset(x_data, y_data)
-    data_loader = DataLoader(dataset, batch_size=40, shuffle=True)
+    num_samples = 200
+    data_loader = dummy_dataloader(f=lambda x: x ** 3, num_samples=num_samples)
 
     # Initialize global model and optimizer
-    global_model = SimpleModel()
+    global_model = build_model(arch="simplemodel", class_number=1)
     optimizer = optim.SGD(global_model.parameters(), lr=0.01)
-
-    n_epochs = 5  # Number of epochs
-    num_sub_batches = 4  # Number of smaller data batches
 
     for epoch in range(n_epochs):
         epoch_loss_list = []
