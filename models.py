@@ -3,6 +3,7 @@ import torch
 import torchvision
 from torch import nn
 from torchvision import models
+import torch.nn.functional as F
 
 warnings.filterwarnings("ignore")
 
@@ -15,6 +16,18 @@ class SimpleModel(nn.Module):
     def forward(self, x):
         return self.fc(x)
 
+class MLPNet(nn.Module):
+    def __init__(self, class_number=10):
+        super(MLPNet, self).__init__()
+        self.fc1 = nn.Linear(28*28, 512)
+        self.fc2 = nn.Linear(512, 128)
+        self.fc3 = nn.Linear(128, class_number)
+    def forward(self, x):
+        x = x.view(-1, 28*28)
+        x = F.relu(self.fc1(x))
+        x = F.relu(self.fc2(x))
+        x = self.fc3(x)
+        return x
 
 class Resnet_cls(nn.Module):
     def __init__(self, orig_resnet, class_number=1000):
@@ -413,6 +426,8 @@ def build_model(arch, class_number, pretrained=True):
     elif arch == 'simplemodel':
         # this model is for testing purpose, is it a simple regression model
         model = SimpleModel()
+    elif arch == 'mlp':
+        model = MLPNet(class_number=class_number)
     else:
         raise Exception('Architecture undefined!')
         

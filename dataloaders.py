@@ -1,7 +1,8 @@
 import torch
 import random
 import numpy as np
-import torch.nn as nn
+import torchvision
+import torchvision.transforms as transforms
 from torch.utils.data import DataLoader, TensorDataset
 
 def dummy_dataloader(f, num_samples):
@@ -15,3 +16,11 @@ def dummy_dataloader(f, num_samples):
     dataset = TensorDataset(x_data, y_data)
     data_loader = DataLoader(dataset, batch_size=40, shuffle=True)
     return data_loader
+
+def mnist_dataloader(global_batch_size, test_batch_size=256):
+    trans = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.5,), (1.0,))])
+    train_loader = DataLoader(torchvision.datasets.MNIST(root='data/', train=True, download=True, transform=trans), 
+                              batch_size=global_batch_size, shuffle=True, num_workers=4)
+    test_loader = DataLoader(torchvision.datasets.MNIST(root='data/', train=False, download=True, transform=trans), 
+                              batch_size=test_batch_size, shuffle=False)
+    return train_loader, test_loader
