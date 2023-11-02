@@ -24,3 +24,14 @@ def mnist_dataloader(global_batch_size, test_batch_size=256):
     test_loader = DataLoader(torchvision.datasets.MNIST(root='data/', train=False, download=True, transform=trans), 
                               batch_size=test_batch_size, shuffle=False)
     return train_loader, test_loader
+
+def CIFAR100_dataloader(global_batch_size, test_batch_size=256):
+    # set up CIFAR100 similar to MNIST
+    transform = transforms.Compose(
+                                [transforms.ToTensor(),
+                                transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
+    train_loader = DataLoader(torchvision.datasets.CIFAR100(root='data/', train=True, download=True, transform=transform), 
+                              batch_size=global_batch_size, shuffle=True, num_workers=4)
+    test_loader = DataLoader(torchvision.datasets.CIFAR100(root='data/', train=False, download=True, transform=transform), 
+                              batch_size=test_batch_size, shuffle=False)
+    return train_loader, test_loader

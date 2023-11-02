@@ -27,7 +27,7 @@ def divide_into_sub_batches(tensor, num_sub_batches):
     return [tensor[i:i + sub_batch_size] for i in range(0, tensor.size(0), sub_batch_size)]
 
 # Worker process
-def worker(model, data, target, gradients_list, loss_list, optimizer, criterion, faulty):
+def worker(idx, model, data, target, gradients_list, loss_list, optimizer, criterion, faulty):
     optimizer.zero_grad()
     output = model(data)
     # loss = nn.MSELoss()(output, target)
@@ -36,20 +36,21 @@ def worker(model, data, target, gradients_list, loss_list, optimizer, criterion,
     if faulty:
         # print("faulty worker")
         # add gaussian noise to gradients
-        gradients = [torch.randn_like(p.grad)*5 for p in model.parameters()]
+        gradients = [torch.randn_like(p.grad)*10 for p in model.parameters()]
         # gradients = [p.grad+(torch.randn_like(p.grad)*10) for p in model.parameters()]
         # gradients = [torch.ones_like(p.grad) * 100000 for p in model.parameters()]
         # convert gradients to numpy array
     else:
         gradients = [p.grad.clone() for p in model.parameters()]
     
-    gradients_list.append(gradients)
+    # gradients_list.append(gradients)
+    gradients_list[idx] = gradients
     loss_list.append(loss.item())
 
 def parallel_worker_train(args):
     # this is a helper function for parallelizing worker
-    model, data, target, gradients_list, loss_list, optimizer, criterion, faulty = args
-    worker(model, data, target, gradients_list, loss_list, optimizer, criterion, faulty)
+    idx, model, data, target, gradients_list, loss_list, optimizer, criterion, faulty = args
+    worker(idx, model, data, target, gradients_list, loss_list, optimizer, criterion, faulty)
 
 def setup_train_job(args):
     # Initialize global model and optimizer, and set up datalaoder
@@ -62,10 +63,14 @@ def setup_train_job(args):
         optimizer = optim.SGD(model.parameters(), lr=0.01)
         criterion = nn.MSELoss()
     elif dataset.lower()=="mnist":
-        # TODO: test loader currently not used!!!
         data_loader, test_loader = mnist_dataloader(global_batch_size)
         model = build_model(arch="mlp", class_number=10)
         optimizer = optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
+        criterion = nn.CrossEntropyLoss()
+    elif dataset.lower()=="cifar100":
+        data_loader, test_loader = CIFAR100_dataloader(global_batch_size)
+        model = build_model(arch="SimpleCNN", class_number=100)
+        optimizer = optim.Adam(model.parameters(), lr=0.003)
         criterion = nn.CrossEntropyLoss()
     else:
         raise ValueError("Dataset not supported")
@@ -79,6 +84,8 @@ def inference(model, data_loader):
     for data_batch, target_batch in data_loader:
         output = model(data_batch)
         _, predicted = torch.max(output.data, 1)
+        # print("pred", predicted)
+        # print("gt", target_batch)
         total += target_batch.size(0)
         correct += (predicted == target_batch).sum().item()
     return correct / total
@@ -87,7 +94,7 @@ def inference(model, data_loader):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="DDP simulation")
     parser.add_argument("-d", "--dataset", metavar="", type=str, default="dummy", help="Dataset to use")
-    parser.add_argument("-e", "--epoch", metavar="", type=int, default=2, help="Number of epochs")
+    parser.add_argument("-e", "--epoch", metavar="", type=int, default=3, help="Number of epochs")
     parser.add_argument("-gb", "--global_batch_size", metavar="", type=int, default=512, help="Global batch size")
     parser.add_argument("-w", "--worker", metavar="", type=int, default=4, 
                         help="Number of workers/sub-batches (Note: global batch size must be divisible by number of workers))")
@@ -107,8 +114,9 @@ if __name__ == '__main__':
     num_processes = args.proc
     tb_log_dir = args.tb
 
-    # print numbers worker
+    # print numbers worker, and proc
     print(f'Number of workers: {num_sub_batches}')
+    print(f'Number of processes: {num_processes}')
 
     # multiprocessing manager, and tensorboard writer
     manager = Manager()
@@ -125,8 +133,10 @@ if __name__ == '__main__':
         epoch_loss_list = []
         for iteration, (data_batch, target_batch) in enumerate(data_loader):
             training_iter+=1
+            global_model.train()
             optimizer.zero_grad()
-            gradients_list = manager.list()
+            # gradients_list = manager.list()
+            gradients_dict = manager.dict()
             loss_list = manager.list()
 
             # Divide the data_batch and target_batch into smaller batches // again simulating DDP
@@ -139,25 +149,29 @@ if __name__ == '__main__':
             for i, (data, target) in enumerate(zip(data_sub_batches, target_sub_batches)):
                 if i in faulty_worker_idxs: faulty = True
                 else: faulty = False
-                args_list.append((global_model, data, target, gradients_list, loss_list, optimizer, criterion, faulty))
-            with Pool(processes=num_processes) as pool:
+                args_list.append((i, global_model, data, target, gradients_dict, loss_list, optimizer, criterion, faulty))
+            # TODO: have a bug when multiple processes are used
+            with ThreadPool(processes=num_processes) as pool:
                 pool.map(parallel_worker_train, args_list)
 
             # Aggregate gradients
             if defense_method == "krum":
                 print("krum defense")
-                gradients_list = aggregation_rules.krum(gradients_list, num_sub_batches, f=1)
+                gradients_list = aggregation_rules.krum(gradients_dict, num_sub_batches, f=1)
                 print(len(gradients_list))
             elif defense_method == "mean":
                 print("mean defense")
-                gradients_list = aggregation_rules.mean_filter(gradients_list)
+                gradients_list = aggregation_rules.mean_filter(gradients_dict)
                 print(len(gradients_list))
             elif defense_method == "pop":
                 print("pop defense (just for testing)")
-                gradients_list = aggregation_rules.pop_one(gradients_list, 0)
+                gradients_list = aggregation_rules.pop_worker_updates(gradients_dict, 0)
                 # gradients_list = aggregation_rules.pop_one(gradients_list, 0)
                 print(len(gradients_list))
-
+            else:
+                pass
+                
+            gradients_list = list(gradients_dict.values())
             aggregated_gradients = aggregation_rules.average_grads(gradients_list)
 
             # Update global model
@@ -173,8 +187,8 @@ if __name__ == '__main__':
 
             # validation per 10 iterations
             if iteration % 10 == 0:
-                print("validation")
                 acc = inference(global_model, test_loader)
+                print("validation accuracy:", acc)
                 # Write to tensorboard tag with worker number
                 if tb_log_dir is not None:
                     writer.add_scalar('Accuracy/val', acc, training_iter)
