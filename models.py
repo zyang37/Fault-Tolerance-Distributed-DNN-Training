@@ -17,6 +17,7 @@ class SimpleModel(nn.Module):
         return self.fc(x)
 
 class MLPNet(nn.Module):
+    # for mnist
     def __init__(self, class_number=10):
         super(MLPNet, self).__init__()
         self.fc1 = nn.Linear(28*28, 512)
@@ -27,6 +28,39 @@ class MLPNet(nn.Module):
         x = F.relu(self.fc1(x))
         x = F.relu(self.fc2(x))
         x = self.fc3(x)
+        return x
+
+class SimpleCNN(nn.Module):
+    # for cifar100
+    def __init__(self, class_number=100):
+        super(SimpleCNN, self).__init__()
+        # Convolutional layer (sees 32x32x3 image tensor)
+        self.conv1 = nn.Conv2d(in_channels=3, out_channels=32, kernel_size=3, padding=1)
+        # Convolutional layer (sees 16x16x32 tensor)
+        self.conv2 = nn.Conv2d(in_channels=32, out_channels=64, kernel_size=3, padding=1)
+        # Max pooling layer
+        self.pool = nn.MaxPool2d(2, 2)
+        # Linear layer (64 * 8 * 8 -> 500)
+        self.fc1 = nn.Linear(64 * 8 * 8, 500)
+        # Linear layer (500 -> 100)
+        self.fc2 = nn.Linear(500, class_number)
+        # Dropout layer (p=0.5)
+        self.dropout = nn.Dropout(0.5)
+
+    def forward(self, x):
+        # Add sequence of convolutional and max pooling layers
+        x = self.pool(F.relu(self.conv1(x)))
+        x = self.pool(F.relu(self.conv2(x)))
+        # Flatten image input
+        x = x.view(-1, 64 * 8 * 8)
+        # Add dropout layer
+        x = self.dropout(x)
+        # Add 1st hidden layer, with relu activation function
+        x = F.relu(self.fc1(x))
+        # Add dropout layer
+        x = self.dropout(x)
+        # Add 2nd hidden layer, with 100 output neurons for the 100 classes of CIFAR100
+        x = self.fc2(x)
         return x
 
 class Resnet_cls(nn.Module):
@@ -428,6 +462,8 @@ def build_model(arch, class_number, pretrained=True):
         model = SimpleModel()
     elif arch == 'mlp':
         model = MLPNet(class_number=class_number)
+    elif arch == 'simplecnn':
+        model = SimpleCNN(class_number=class_number)
     else:
         raise Exception('Architecture undefined!')
         

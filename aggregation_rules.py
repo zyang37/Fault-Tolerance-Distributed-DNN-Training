@@ -20,11 +20,13 @@ def average_grads(gradients_list):
         aggregated_gradients.append(sum(grad) / len(grad))
     return aggregated_gradients
 
-def pop_one(grads, idx):
-    grads.pop(idx)
-    return grads
+def pop_worker_updates(gradients_dict, idx):
+    # testing, remove key at idx
+    del gradients_dict[idx]
+    return gradients_dict
 
-def mean_filter(gradients_list):
+# in progress
+def mean_filter(gradients_dict, f=1):
     worker_means = []
     for i, worker_grads in enumerate(gradients_list):
         worker_flat_grads = flatten_grads([worker_grads])
@@ -40,10 +42,19 @@ def mean_filter(gradients_list):
     # select the worker with the smallest sum
     _, selected_worker = torch.min(torch.tensor(worker_dis_sum), 0)
 
-    return [gradients_list[selected_worker]]
+    # find top k max
+    _, de_selected_worker = torch.topk(torch.tensor(worker_dis_sum), k=f, largest=False)
+    print(de_selected_worker)
+    filtered_grads = []
+    for i in range(len(gradients_list)):
+        if i != de_selected_worker:
+            filtered_grads.append(gradients_list[i])
+
+    # return [gradients_list[selected_worker]]
+    return filtered_grads
 
 # in progress
-def krum(gradients_list, num_workers, f=1):
+def krum(gradients_dict, num_workers, f=1):
     """
     Krum algorithm for Byzantine-resilient gradient aggregation.
 
@@ -73,5 +84,4 @@ def krum(gradients_list, num_workers, f=1):
     # # Select the gradient with the minimum score
     # _, selected_worker = torch.min(scores, 0)
     # return [gradients_list[selected_worker]]
-
-    return gradients_list
+    return gradients_dict
