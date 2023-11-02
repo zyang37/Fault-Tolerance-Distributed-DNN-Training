@@ -17,7 +17,7 @@ def dummy_dataloader(f, num_samples):
     data_loader = DataLoader(dataset, batch_size=40, shuffle=True)
     return data_loader
 
-def mnist_dataloader(global_batch_size, test_batch_size=128):
+def mnist_dataloader(global_batch_size, test_batch_size=256):
     trans = transforms.Compose([transforms.ToTensor(), transforms.Normalize((0.5,), (1.0,))])
     train_loader = DataLoader(torchvision.datasets.MNIST(root='data/', train=True, download=True, transform=trans), 
                               batch_size=global_batch_size, shuffle=True, num_workers=4)

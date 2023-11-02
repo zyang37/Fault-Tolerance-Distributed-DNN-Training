@@ -19,9 +19,9 @@ class SimpleModel(nn.Module):
 class MLPNet(nn.Module):
     def __init__(self, class_number=10):
         super(MLPNet, self).__init__()
-        self.fc1 = nn.Linear(28*28, 256)
-        self.fc2 = nn.Linear(256, 64)
-        self.fc3 = nn.Linear(64, class_number)
+        self.fc1 = nn.Linear(28*28, 512)
+        self.fc2 = nn.Linear(512, 128)
+        self.fc3 = nn.Linear(128, class_number)
     def forward(self, x):
         x = x.view(-1, 28*28)
         x = F.relu(self.fc1(x))

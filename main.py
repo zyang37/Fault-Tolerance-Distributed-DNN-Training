@@ -10,6 +10,7 @@ from torch.utils.tensorboard import SummaryWriter
 
 from models import build_model
 from dataloaders import *
+import aggregation_rules
 
 # Set seed for reproducibility
 seed_value = 1
@@ -26,26 +27,36 @@ def divide_into_sub_batches(tensor, num_sub_batches):
     return [tensor[i:i + sub_batch_size] for i in range(0, tensor.size(0), sub_batch_size)]
 
 # Worker process
-def worker(model, data, target, gradients_list, loss_list, optimizer, criterion):
+def worker(model, data, target, gradients_list, loss_list, optimizer, criterion, faulty):
     optimizer.zero_grad()
     output = model(data)
     # loss = nn.MSELoss()(output, target)
     loss = criterion(output, target)
     loss.backward()
-    gradients = [p.grad.clone() for p in model.parameters()]
+    if faulty:
+        # print("faulty worker")
+        # add gaussian noise to gradients
+        gradients = [torch.randn_like(p.grad)*5 for p in model.parameters()]
+        # gradients = [p.grad+(torch.randn_like(p.grad)*10) for p in model.parameters()]
+        # gradients = [torch.ones_like(p.grad) * 100000 for p in model.parameters()]
+        # convert gradients to numpy array
+    else:
+        gradients = [p.grad.clone() for p in model.parameters()]
+    
     gradients_list.append(gradients)
     loss_list.append(loss.item())
 
 def parallel_worker_train(args):
     # this is a helper function for parallelizing worker
-    model, data, target, gradients_list, loss_list, optimizer, criterion = args
-    worker(model, data, target, gradients_list, loss_list, optimizer, criterion)
+    model, data, target, gradients_list, loss_list, optimizer, criterion, faulty = args
+    worker(model, data, target, gradients_list, loss_list, optimizer, criterion, faulty)
 
 def setup_train_job(args):
     # Initialize global model and optimizer, and set up datalaoder
     dataset = args.dataset
     global_batch_size = args.global_batch_size
     if dataset=="dummy":
+        test_loader = None
         data_loader = dummy_dataloader(f=lambda x: x ** 3, num_samples=500)
         model = build_model(arch="simplemodel", class_number=1)
         optimizer = optim.SGD(model.parameters(), lr=0.01)
@@ -54,39 +65,60 @@ def setup_train_job(args):
         # TODO: test loader currently not used!!!
         data_loader, test_loader = mnist_dataloader(global_batch_size)
         model = build_model(arch="mlp", class_number=10)
-        optimizer = optim.SGD(model.parameters(), lr=0.01, momentum=0.9)
+        optimizer = optim.SGD(model.parameters(), lr=0.001, momentum=0.9)
         criterion = nn.CrossEntropyLoss()
     else:
         raise ValueError("Dataset not supported")
     
-    return data_loader, model, optimizer, criterion
+    return data_loader, test_loader, model, optimizer, criterion
     
+def inference(model, data_loader):
+    model.eval()
+    correct = 0
+    total = 0
+    for data_batch, target_batch in data_loader:
+        output = model(data_batch)
+        _, predicted = torch.max(output.data, 1)
+        total += target_batch.size(0)
+        correct += (predicted == target_batch).sum().item()
+    return correct / total
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="DDP simulation")
     parser.add_argument("-d", "--dataset", metavar="", type=str, default="dummy", help="Dataset to use")
-    parser.add_argument("-e", "--epoch", metavar="", type=int, default=3, help="Number of epochs")
+    parser.add_argument("-e", "--epoch", metavar="", type=int, default=2, help="Number of epochs")
     parser.add_argument("-gb", "--global_batch_size", metavar="", type=int, default=512, help="Global batch size")
     parser.add_argument("-w", "--worker", metavar="", type=int, default=4, 
                         help="Number of workers/sub-batches (Note: global batch size must be divisible by number of workers))")
+    # take in a list of faulty workers idx
+    parser.add_argument("-f", "--faulty", metavar="", type=int, nargs='+', default=[], help="Indics of faulty worker (Ex: -f 0 1 2)")
+    # defense method
+    parser.add_argument("-df", "--defense", metavar="", type=str, default=None, help="Defense method")
     parser.add_argument("--proc", metavar="", type=int, default=1, help="Number of processes")
+    parser.add_argument("-tb", "--tb", metavar="", type=str, default=None, help="Tensorboard log directory")
     args = parser.parse_args()
 
     # parse arguments
     n_epochs = args.epoch
     num_sub_batches = args.worker
+    faulty_worker_idxs = args.faulty
+    defense_method = args.defense
     num_processes = args.proc
+    tb_log_dir = args.tb
 
     # print numbers worker
     print(f'Number of workers: {num_sub_batches}')
 
     # multiprocessing manager, and tensorboard writer
     manager = Manager()
-    writer = SummaryWriter()
+
+    # Tensorboard writer
+    if tb_log_dir is not None:
+        writer = SummaryWriter(log_dir=tb_log_dir)
 
     # setup train job
-    data_loader, global_model, optimizer, criterion = setup_train_job(args)
+    data_loader, test_loader, global_model, optimizer, criterion = setup_train_job(args)
 
     training_iter = 0
     for epoch in range(n_epochs):
@@ -102,12 +134,31 @@ if __name__ == '__main__':
             target_sub_batches = divide_into_sub_batches(target_batch, num_sub_batches)
             # print(len(data_sub_batches))
             
-            args_list = [(global_model, data, target, gradients_list, loss_list, optimizer, criterion) for data, target in zip(data_sub_batches, target_sub_batches)]
+            faulty = False
+            args_list = []
+            for i, (data, target) in enumerate(zip(data_sub_batches, target_sub_batches)):
+                if i in faulty_worker_idxs: faulty = True
+                else: faulty = False
+                args_list.append((global_model, data, target, gradients_list, loss_list, optimizer, criterion, faulty))
             with Pool(processes=num_processes) as pool:
                 pool.map(parallel_worker_train, args_list)
 
             # Aggregate gradients
-            aggregated_gradients = [sum(grad) for grad in zip(*gradients_list)]
+            if defense_method == "krum":
+                print("krum defense")
+                gradients_list = aggregation_rules.krum(gradients_list, num_sub_batches, f=1)
+                print(len(gradients_list))
+            elif defense_method == "mean":
+                print("mean defense")
+                gradients_list = aggregation_rules.mean_filter(gradients_list)
+                print(len(gradients_list))
+            elif defense_method == "pop":
+                print("pop defense (just for testing)")
+                gradients_list = aggregation_rules.pop_one(gradients_list, 0)
+                # gradients_list = aggregation_rules.pop_one(gradients_list, 0)
+                print(len(gradients_list))
+
+            aggregated_gradients = aggregation_rules.average_grads(gradients_list)
 
             # Update global model
             for p, agg_grad in zip(global_model.parameters(), aggregated_gradients):
@@ -120,13 +171,21 @@ if __name__ == '__main__':
             # print curr iter / total iter
             print(f'Epoch: {epoch+1}, sub-batch: {iteration+1}/{len(data_loader)}, avg sub-batch loss: {round(avg_iter_loss, 3)}')
 
+            # validation per 10 iterations
+            if iteration % 10 == 0:
+                print("validation")
+                acc = inference(global_model, test_loader)
+                # Write to tensorboard tag with worker number
+                if tb_log_dir is not None:
+                    writer.add_scalar('Accuracy/val', acc, training_iter)
+
             # Write to tensorboard tag with worker number
-            # writer.add_scalar('Loss/worker', avg_iter_loss, iteration)
-            writer.add_scalar('Loss/iter', avg_iter_loss, training_iter)
+            if tb_log_dir is not None:
+                writer.add_scalar('Loss/train', avg_iter_loss, training_iter)
 
         # Compute and print the average epoch loss
         avg_epoch_loss = sum(epoch_loss_list) / len(epoch_loss_list)
         # writer.add_scalar('Loss/epoch', avg_epoch_loss, epoch)
         print(f'Epoch: {epoch+1} done, avg loss: {round(avg_epoch_loss, 3)}')
 
-    writer.close()
+    if tb_log_dir is not None: writer.close()
