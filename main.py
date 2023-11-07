@@ -28,6 +28,7 @@ def divide_into_sub_batches(tensor, num_sub_batches):
 
 # Worker process
 def worker(idx, model, data, target, gradients_list, loss_list, optimizer, criterion, faulty):
+    model.train()
     optimizer.zero_grad()
     output = model(data)
     # loss = nn.MSELoss()(output, target)
@@ -100,10 +101,10 @@ if __name__ == '__main__':
                         help="Number of workers/sub-batches (Note: global batch size must be divisible by number of workers))")
     # take in a list of faulty workers idx
     parser.add_argument("-f", "--faulty", metavar="", type=int, nargs='+', default=[], help="Indics of faulty worker (Ex: -f 0 1 2)")
-    # defense method
     parser.add_argument("-df", "--defense", metavar="", type=str, default=None, help="Defense method")
     parser.add_argument("--proc", metavar="", type=int, default=1, help="Number of processes")
     parser.add_argument("-tb", "--tb", metavar="", type=str, default=None, help="Tensorboard log directory")
+    parser.add_argument("--device", metavar="", type=str, default="cpu", help="Device to use")
     args = parser.parse_args()
 
     # parse arguments
@@ -113,6 +114,20 @@ if __name__ == '__main__':
     defense_method = args.defense
     num_processes = args.proc
     tb_log_dir = args.tb
+    device = args.device
+
+    # set device
+    print(f'Device: {device}')
+    if device == "cpu":
+        device = torch.device("cpu")
+    elif device == "gpu":
+        # not yet tested
+        device = torch.device("cuda:0")
+    elif device == "mps":
+        # have bugs when using mps
+        device = torch.device("mps")
+    else:
+        raise ValueError("Device not supported")
 
     # print numbers worker, and proc
     print(f'Number of workers: {num_sub_batches}')
@@ -127,6 +142,7 @@ if __name__ == '__main__':
 
     # setup train job
     data_loader, test_loader, global_model, optimizer, criterion = setup_train_job(args)
+    global_model.to(device)
 
     training_iter = 0
     for epoch in range(n_epochs):
@@ -147,6 +163,8 @@ if __name__ == '__main__':
             faulty = False
             args_list = []
             for i, (data, target) in enumerate(zip(data_sub_batches, target_sub_batches)):
+                data, target = data.to(device), target.to(device)
+                
                 if i in faulty_worker_idxs: faulty = True
                 else: faulty = False
                 args_list.append((i, global_model, data, target, gradients_dict, loss_list, optimizer, criterion, faulty))
@@ -203,3 +221,4 @@ if __name__ == '__main__':
         print(f'Epoch: {epoch+1} done, avg loss: {round(avg_epoch_loss, 3)}')
 
     if tb_log_dir is not None: writer.close()
+    
