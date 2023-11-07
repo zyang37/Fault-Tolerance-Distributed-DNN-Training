@@ -121,8 +121,7 @@ if __name__ == '__main__':
     if device == "cpu":
         device = torch.device("cpu")
     elif device == "gpu":
-        # not yet tested
-        device = torch.device("cuda:0")
+        raise ValueError("Sharing CUDA tensor across processes is not yet supported")
     elif device == "mps":
         # have bugs when using mps
         device = torch.device("mps")
