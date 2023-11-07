@@ -1,3 +1,7 @@
+'''
+This file contains aggregation rules (faulty gradient detection algorithms) for DDP.
+'''
+
 import torch
 import numpy as np
 
@@ -9,7 +13,6 @@ def flatten_grads(model_grads):
     # concat flat_grads_per_model from all layers into a single vector
     flat_grads = torch.cat(flat_grads_per_model, dim=0)
     return flat_grads
-
 
 def average_grads(gradients_list):
     # gradients_list: list of list of gradients
