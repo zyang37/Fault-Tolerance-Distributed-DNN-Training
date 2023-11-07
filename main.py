@@ -27,7 +27,7 @@ def divide_into_sub_batches(tensor, num_sub_batches):
     return [tensor[i:i + sub_batch_size] for i in range(0, tensor.size(0), sub_batch_size)]
 
 # Worker process
-def worker(idx, model, data, target, gradients_list, loss_list, optimizer, criterion, faulty):
+def worker(idx, model, data, target, gradients_dict, loss_list, optimizer, criterion, faulty):
     model.train()
     optimizer.zero_grad()
     output = model(data)
@@ -45,7 +45,7 @@ def worker(idx, model, data, target, gradients_list, loss_list, optimizer, crite
         gradients = [p.grad.clone() for p in model.parameters()]
     
     # gradients_list.append(gradients)
-    gradients_list[idx] = gradients
+    gradients_dict[idx] = gradients
     loss_list.append(loss.item())
 
 def parallel_worker_train(args):

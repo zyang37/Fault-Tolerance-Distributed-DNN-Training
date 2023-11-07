@@ -4,14 +4,22 @@
 - Work under a dev branch, and then merge to the master branch later. 
 
 **[TODOs]**
-- [ ] Add some instructions on how to run the code.
-- [ ] Make a sequnatil version of the DDP program. 
-- [ ] Create a module for the attacking gradients. 
-- [ ] Create a module for aggregating gradients algorithm (as placeholder for various aggregating rules for now). 
-- [ ] Create a Pytoch dataloader for a simple dataset.
-- [ ] Create a model.py file as a placehoder for various DNN models.
+- [ ] Implement the detection algorithms
+- [ ] Implement the alternative DDP algorithms (pass in sub data-batch replicas)
+- [ ] Implement the correction algorithms (data collection)
+- [ ] Implement the correction algorithms (gradient correction model)
+- [ ] Implement the correction algorithms (run in a saparate thread)
 
 <br>
+
+**[11-07-2023]**
+<details>
+  <summary> updates </summary>
+
+- Now have a DDP simulator that suports single and multiple processes. 
+- Able to simulate the DDP process for MNIST and CIFAR100 dataset with different models.
+
+</details>
 
 **[10-19-2023]**
 <details>
