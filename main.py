@@ -148,6 +148,8 @@ if __name__ == '__main__':
     data_loader, test_loader, global_model, optimizer, criterion = setup_train_job(args)
     global_model.to(device)
 
+    for param_group in optimizer.param_groups: base_lr = param_group['lr'] 
+
     # set up aggregator, and data distributor
     correct_args = {
         'correct': error_correction,
@@ -215,7 +217,7 @@ if __name__ == '__main__':
 
             # adjust learning rate: lr * sqrt(k)
             for param_group in optimizer.param_groups:
-                param_group['lr'] = param_group['lr'] * np.sqrt(k)
+                param_group['lr'] = base_lr * np.sqrt(k)
 
             # Update global model
             for p, agg_grad in zip(global_model.parameters(), aggregated_gradients):
