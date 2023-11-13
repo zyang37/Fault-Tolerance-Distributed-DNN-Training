@@ -18,7 +18,17 @@ def noisy_gradients_gen(torch_model, mode: int, noise_type: int, noise_scale: fl
     # gradients = [p.grad.clone() for p in self.model.parameters()]
     if mode==0:
         # deterministic
-        pass
+        if noise_type==0:
+            # add constant
+            altered_gradients = [p.grad.clone() + torch.ones_like(p.grad.clone()) * noise_scale for p in torch_model.parameters()]
+        elif noise_type==1:
+            # multiply constant
+            altered_gradients = [p.grad.clone() * noise_scale for p in torch_model.parameters()]
+        elif noise_type==2:
+            # raise to power
+            altered_gradients = [p.grad.clone() ** noise_scale for p in torch_model.parameters()]
+        else:
+            raise NotImplementedError
     elif mode==1:
         # add random
         pass
