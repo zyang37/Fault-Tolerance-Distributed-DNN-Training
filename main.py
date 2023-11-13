@@ -11,6 +11,7 @@ from torch.utils.tensorboard import SummaryWriter
 from models import build_model
 from dataloaders import *
 import aggregation_rules
+import data_distributor
 
 # Set seed for reproducibility
 seed_value = 1
@@ -37,7 +38,7 @@ def worker(idx, model, data, target, gradients_dict, loss_list, optimizer, crite
     if faulty:
         # print("faulty worker")
         # add gaussian noise to gradients
-        gradients = [torch.randn_like(p.grad)*10 for p in model.parameters()]
+        gradients = [torch.randn_like(p.grad)*(-100) for p in model.parameters()]
         # gradients = [p.grad+(torch.randn_like(p.grad)*10) for p in model.parameters()]
         # gradients = [torch.ones_like(p.grad) * 100000 for p in model.parameters()]
         # convert gradients to numpy array
@@ -58,8 +59,8 @@ def setup_train_job(args):
     dataset = args.dataset
     global_batch_size = args.global_batch_size
     if dataset=="dummy":
-        test_loader = None
-        data_loader = dummy_dataloader(f=lambda x: x ** 3, num_samples=500)
+        # test_loader = None
+        data_loader, test_loader = dummy_dataloader(f=lambda x: x ** 3, num_samples=500)
         model = build_model(arch="simplemodel", class_number=1)
         optimizer = optim.SGD(model.parameters(), lr=0.01)
         criterion = nn.MSELoss()
@@ -105,6 +106,8 @@ if __name__ == '__main__':
     parser.add_argument("--proc", metavar="", type=int, default=1, help="Number of processes")
     parser.add_argument("-tb", "--tb", metavar="", type=str, default=None, help="Tensorboard log directory")
     parser.add_argument("--device", metavar="", type=str, default="cpu", help="Device to use")
+    # correct or not, use action
+    parser.add_argument("--correct", action="store_true", help="Whether to use error correction")
     args = parser.parse_args()
 
     # parse arguments
@@ -115,6 +118,7 @@ if __name__ == '__main__':
     num_processes = args.proc
     tb_log_dir = args.tb
     device = args.device
+    error_correction = args.correct
 
     # set device
     print(f'Device: {device}')
@@ -131,7 +135,8 @@ if __name__ == '__main__':
     # print numbers worker, and proc
     print(f'Number of workers: {num_sub_batches}')
     print(f'Number of processes: {num_processes}')
-
+    print(f'Faulty worker idxs: {faulty_worker_idxs}')
+    
     # multiprocessing manager, and tensorboard writer
     manager = Manager()
 
@@ -143,6 +148,19 @@ if __name__ == '__main__':
     data_loader, test_loader, global_model, optimizer, criterion = setup_train_job(args)
     global_model.to(device)
 
+    # set up aggregator, and data distributor
+    correct_args = {
+        'correct': error_correction,
+        'cmodel': "linear",
+        'model': global_model
+    }
+    aggregator = aggregation_rules.Aggregator(device=device, correct_args=correct_args)
+    data_distributor = data_distributor.DDPDataDistributor(num_workers=num_sub_batches, 
+                                                           faulty_worker_ids=faulty_worker_idxs, 
+                                                           correction=error_correction)
+    aggregator.update_faulty_worker_idxs(faulty_worker_idxs)
+
+    corrected = False
     training_iter = 0
     for epoch in range(n_epochs):
         epoch_loss_list = []
@@ -155,8 +173,9 @@ if __name__ == '__main__':
             loss_list = manager.list()
 
             # Divide the data_batch and target_batch into smaller batches // again simulating DDP
-            data_sub_batches = divide_into_sub_batches(data_batch, num_sub_batches)
-            target_sub_batches = divide_into_sub_batches(target_batch, num_sub_batches)
+            # data_sub_batches = divide_into_sub_batches(data_batch, num_sub_batches)
+            # target_sub_batches = divide_into_sub_batches(target_batch, num_sub_batches)
+            data_sub_batches, target_sub_batches, worker_batch_map = data_distributor.distribute(data_batch, target_batch, corrected)
             # print(len(data_sub_batches))
             
             faulty = False
@@ -188,8 +207,11 @@ if __name__ == '__main__':
             else:
                 pass
                 
-            gradients_list = list(gradients_dict.values())
-            aggregated_gradients = aggregation_rules.average_grads(gradients_list)
+            # gradients_list = list(gradients_dict.values())
+            # aggregated_gradients = aggregation_rules.average_grads(gradients_list)
+            print("W-B MAP:", worker_batch_map)
+            aggregated_gradients = aggregator.aggregate(gradients_dict, worker_batch_map)
+            corrected = aggregator.corrected
 
             # Update global model
             for p, agg_grad in zip(global_model.parameters(), aggregated_gradients):
@@ -200,7 +222,7 @@ if __name__ == '__main__':
             epoch_loss_list.append(avg_iter_loss)
             # print(f'Epoch: {epoch+1}, sub-batch: {iteration}, avg sub-batch loss: {round(avg_iter_loss, 3)}')
             # print curr iter / total iter
-            print(f'Epoch: {epoch+1}, sub-batch: {iteration+1}/{len(data_loader)}, avg sub-batch loss: {round(avg_iter_loss, 3)}')
+            print(f'EP: {epoch+1}/{n_epochs}, sub-batch: {iteration+1}/{len(data_loader)}, avg sub-batch loss: {round(avg_iter_loss, 3)}')
 
             # validation per 10 iterations
             if iteration % 10 == 0:

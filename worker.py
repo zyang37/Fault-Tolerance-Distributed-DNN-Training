@@ -9,7 +9,7 @@ def noisy_gradients_gen(torch_model, mode: int, noise_type: int, noise_scale: fl
     '''
     args:
         - torch_model: the model grad to be altered
-        - mode: 0 deterministic, 1 add random, 2 random
+        - mode: 0 deterministic, 1 alter with random, 2 completely random
         - noise_type: For different mode, noise_type can include different noise types
         - noise_scale: the scale of noise
     return: 
