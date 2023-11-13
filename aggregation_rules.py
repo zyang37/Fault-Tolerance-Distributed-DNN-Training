@@ -39,7 +39,7 @@ class Aggregator:
         print("[AGG] used gradients from workers: {}".format(sorted(list(self.gradients_dict.keys()))))
         gradients_list = list(self.gradients_dict.values())
         aggregated_gradients = average_grads(gradients_list)
-        return aggregated_gradients
+        return aggregated_gradients, len(gradients_list)
 
     def update_faulty_worker_idxs(self, faulty_worker_idxs):
         '''
@@ -93,7 +93,7 @@ class Aggregator:
         init correction models, based on faulty_worker_idxs and worker_batch_map
         '''
         for i in self.faulty_worker_idxs:
-            print("Init correction model for worker {}".format(i))
+            print("[AGG] Init correction model for worker {}".format(i))
             self.correction_models[i] = CM(i, self.cmodel, self.tb_log_dir, self.device)
 
     def remove_faulty_gradients(self):

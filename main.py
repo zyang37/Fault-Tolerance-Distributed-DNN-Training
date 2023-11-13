@@ -72,7 +72,7 @@ def setup_train_job(args):
     elif dataset.lower()=="cifar100":
         data_loader, test_loader = CIFAR100_dataloader(global_batch_size)
         model = build_model(arch="SimpleCNN", class_number=100)
-        optimizer = optim.Adam(model.parameters(), lr=0.003)
+        optimizer = optim.Adam(model.parameters(), lr=0.002)
         criterion = nn.CrossEntropyLoss()
     else:
         raise ValueError("Dataset not supported")
@@ -210,8 +210,12 @@ if __name__ == '__main__':
             # gradients_list = list(gradients_dict.values())
             # aggregated_gradients = aggregation_rules.average_grads(gradients_list)
             print("W-B MAP:", worker_batch_map)
-            aggregated_gradients = aggregator.aggregate(gradients_dict, worker_batch_map)
+            aggregated_gradients, k = aggregator.aggregate(gradients_dict, worker_batch_map)
             corrected = aggregator.corrected
+
+            # adjust learning rate: lr * sqrt(k)
+            for param_group in optimizer.param_groups:
+                param_group['lr'] = param_group['lr'] * np.sqrt(k)
 
             # Update global model
             for p, agg_grad in zip(global_model.parameters(), aggregated_gradients):
