@@ -4,6 +4,106 @@ This file contains aggregation rules (faulty gradient detection algorithms) for 
 
 import torch
 import numpy as np
+from correction_module import CorrectionModule as CM
+
+seed_value = 1
+
+class Aggregator:
+    '''
+    This class that includes all mechanisms for aggregation, and handling communication with the correction module
+    '''
+    def __init__(self, tb_log_dir=None, device="cpu", correct_args={}):
+        
+        self.correct = correct_args['correct']
+        self.cmodel = correct_args['cmodel']
+        self.model = correct_args['model']
+        self.corrected = False
+        
+        self.device = torch.device(device)
+        self.tb_log_dir = tb_log_dir
+        self.faulty_worker_idxs = []
+        self.correction_models = {}
+
+    def aggregate(self, gradients_dict, worker_batch_map):
+        '''
+        Aggregate gradients from gradients_dict (avg)
+        '''
+        self.gradients_dict = gradients_dict
+        self.worker_batch_map = worker_batch_map
+
+        self.detect_faulty_gradients()
+
+        if len(self.faulty_worker_idxs) > 0:
+            self.handle_faulty_gradients()
+
+        print("[AGG] used gradients from workers: {}".format(sorted(list(self.gradients_dict.keys()))))
+        gradients_list = list(self.gradients_dict.values())
+        aggregated_gradients = average_grads(gradients_list)
+        return aggregated_gradients
+
+    def update_faulty_worker_idxs(self, faulty_worker_idxs):
+        '''
+        Update faulty_worker_idxs
+        '''
+        self.faulty_worker_idxs = faulty_worker_idxs
+
+    def detect_faulty_gradients(self):
+        '''
+        Detect faulty gradients from gradients_dict and update faulty_worker_idxs
+        '''
+        # TODO: implement faulty gradient detection
+        if len(self.faulty_worker_idxs)==0:
+            # detect
+            # update self.faulty_worker_idxs
+            pass
+        else:
+            pass
+    
+    def handle_faulty_gradients(self):
+        '''
+        Handle faulty gradients from gradients_list
+        '''
+        if self.correct:
+            if len(self.correction_models) == 0:
+                self.correction_model_init()
+            self.correct_faulty_gradients()
+        else:
+            self.remove_faulty_gradients()
+
+    def correct_faulty_gradients(self):
+        '''
+        Correct faulty gradients from gradients_dist. 
+        loop through correction_models:
+            if model not trained, add data, remove faulty gradients
+            else, correct faulty gradients
+        '''
+        for faulty_id, correction_model in self.correction_models.items():
+            if correction_model.model_status != "trained":
+                # add data, if will train if the dataset is large enough
+                correction_model.collect_data(self.gradients_dict[faulty_id], self.gradients_dict[self.worker_batch_map[faulty_id]])
+                # remove faulty gradients
+                del self.gradients_dict[faulty_id]
+            else:
+                self.corrected = True
+                # correct faulty gradients
+                self.gradients_dict[faulty_id] = correction_model.correct_gradients(self.gradients_dict[faulty_id], self.model)
+    
+    def correction_model_init(self):
+        '''
+        init correction models, based on faulty_worker_idxs and worker_batch_map
+        '''
+        for i in self.faulty_worker_idxs:
+            print("Init correction model for worker {}".format(i))
+            self.correction_models[i] = CM(i, self.cmodel, self.tb_log_dir, self.device)
+
+    def remove_faulty_gradients(self):
+        '''
+        Remove faulty gradients from gradients_dist
+        '''
+        for idx in self.faulty_worker_idxs:
+            del self.gradients_dict[idx]
+            
+
 
 # helper functions 
 def flatten_grads(model_grads):
