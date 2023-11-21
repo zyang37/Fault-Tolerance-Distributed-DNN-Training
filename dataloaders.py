@@ -29,16 +29,41 @@ def mnist_dataloader(global_batch_size, test_batch_size=256):
     train_loader = DataLoader(torchvision.datasets.MNIST(root='data/', train=True, download=True, transform=trans), 
                               batch_size=global_batch_size, shuffle=True, num_workers=4)
     test_loader = DataLoader(torchvision.datasets.MNIST(root='data/', train=False, download=True, transform=trans), 
-                              batch_size=test_batch_size, shuffle=False)
+                              batch_size=test_batch_size, shuffle=False, num_workers=4)
     return train_loader, test_loader
 
-def CIFAR100_dataloader(global_batch_size, test_batch_size=256):
+def CIFAR100_dataloader(global_batch_size, test_batch_size=256, arch=None):
     # set up CIFAR100 similar to MNIST
-    transform = transforms.Compose(
+    if arch is None:
+        transform = transforms.Compose(
                                 [transforms.ToTensor(),
-                                transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))])
+                                transforms.Normalize((0.5070, 0.4865, 0.4408), (0.2672, 0.2563, 0.2760))])
+    elif "resnet" in arch.lower():
+        transform = transforms.Compose(
+                                    [transforms.Resize((224,224)),
+                                    transforms.ToTensor(),
+                                    transforms.Normalize((0.5070, 0.4865, 0.4408), (0.2672, 0.2563, 0.2760))])
     train_loader = DataLoader(torchvision.datasets.CIFAR100(root='data/', train=True, download=True, transform=transform), 
                               batch_size=global_batch_size, shuffle=True, num_workers=4)
     test_loader = DataLoader(torchvision.datasets.CIFAR100(root='data/', train=False, download=True, transform=transform), 
-                              batch_size=test_batch_size, shuffle=False)
+                              batch_size=test_batch_size, shuffle=False, num_workers=4)
+    return train_loader, test_loader
+
+def CIFAR10_dataloader(global_batch_size, test_batch_size=256, arch=None):
+    # set up CIFAR10 similar to MNIST
+    MEAN = (0.4914, 0.4822, 0.4466)
+    STD=  (0.2470, 0.2434, 0.2615)
+    if arch is None:
+        transform = transforms.Compose(
+                                [transforms.ToTensor(),
+                                transforms.Normalize(MEAN, STD)])
+    elif "resnet" in arch.lower():
+        transform = transforms.Compose(
+                                    [transforms.Resize((224,224)),
+                                    transforms.ToTensor(),
+                                    transforms.Normalize(MEAN, STD)])
+    train_loader = DataLoader(torchvision.datasets.CIFAR10(root='data/', train=True, download=True, transform=transform), 
+                              batch_size=global_batch_size, shuffle=True, num_workers=4)
+    test_loader = DataLoader(torchvision.datasets.CIFAR10(root='data/', train=False, download=True, transform=transform), 
+                              batch_size=test_batch_size, shuffle=False, num_workers=4)
     return train_loader, test_loader

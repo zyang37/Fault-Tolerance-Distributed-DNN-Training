@@ -17,6 +17,7 @@ class Aggregator:
         self.correct = correct_args['correct']
         self.cmodel = correct_args['cmodel']
         self.model = correct_args['model']
+        self.data_coll_path = correct_args['data_coll_path']
         self.corrected = False
         
         self.device = torch.device(device)
@@ -24,7 +25,7 @@ class Aggregator:
         self.faulty_worker_idxs = []
         self.correction_models = {}
 
-    def aggregate(self, gradients_dict, worker_batch_map):
+    def aggregate(self, gradients_dict, worker_batch_map, verbose=False):
         '''
         Aggregate gradients from gradients_dict (avg)
         '''
@@ -36,7 +37,8 @@ class Aggregator:
         if len(self.faulty_worker_idxs) > 0:
             self.handle_faulty_gradients()
 
-        print("[AGG] used gradients from workers: {}".format(sorted(list(self.gradients_dict.keys()))))
+        if verbose:
+            print("[AGG] used gradients from workers: {}".format(sorted(list(self.gradients_dict.keys()))))
         gradients_list = list(self.gradients_dict.values())
         aggregated_gradients = average_grads(gradients_list)
         return aggregated_gradients, len(gradients_list)
@@ -94,7 +96,13 @@ class Aggregator:
         '''
         for i in self.faulty_worker_idxs:
             print("[AGG] Init correction model for worker {}".format(i))
-            self.correction_models[i] = CM(i, self.cmodel, self.tb_log_dir, self.device)
+            # self.correction_models[i] = CM(i, self.cmodel, self.tb_log_dir, self.device)
+            self.correction_models[i] = CM(worker_id=i, 
+                                           train_at_iter=10, 
+                                           model=self.cmodel, 
+                                           tb_log_dir=self.tb_log_dir, 
+                                           device="cpu", 
+                                           data_coll_path=self.data_coll_path)
 
     def remove_faulty_gradients(self):
         '''

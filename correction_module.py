@@ -7,29 +7,35 @@ This file contains correction module for DDP.
 Idealy, this should run on a separate process, to avoid blocking the main process
 '''
 
+import os
 import torch
 import pickle
 from sklearn import svm
 from sklearn import linear_model
 from sklearn.neural_network import MLPRegressor
-
 from torch.utils.tensorboard import SummaryWriter
 
 seed_value = 1
 
-
 class CorrectionModule:
     '''
     This class that includes all mechanisms for correction
+    It is initialized in aggregation_rules.py
     '''
-    def __init__(self, worker_id, model=None, tb_log_dir=None, device="cpu"):
+    def __init__(self, worker_id, train_at_iter=10, model=None, tb_log_dir=None, device="cpu", data_coll_path=False):
+        '''
+        Note: 
+            - data_coll_path: if is a [path], the correction module will only collect data, and not train the correction model
+        '''
         self.worker_id = worker_id
         self.model = model
+        self.train_at_iter = train_at_iter
         self.model_status = "not initailized"
         self.gradient_dataset ={'input':[], 'target':[]}
         self.device = torch.device(device)
         self.tb_log_dir = tb_log_dir
         self.writer = None
+        self.data_coll_path = data_coll_path
 
         if model is not None:
             self.regarsion_model_init(model)
@@ -54,10 +60,14 @@ class CorrectionModule:
         self.gradient_dataset['target'].append(flat_target_grads)
 
         # check if the dataset is large enough to train the correction model
-        # TODO: add a threshold here!!!
-        if self.dataset_size() >= 1:
-            print("[CORRECTION] Training ...")
-            self.train_model()
+        if self.dataset_size() >= self.train_at_iter:
+            if self.data_coll_path:
+                print("[CORRECTION] Data collected at {} iterations, EXIT!".format(self.dataset_size()))
+                self.write_dataset_to_disk(self.data_coll_path)
+                exit()
+            else:
+                print("[CORRECTION] Training ...")
+                self.train_model()
 
     def dataset_size(self):
         '''
@@ -69,6 +79,11 @@ class CorrectionModule:
         '''
         Save the gradient_dataset to disk as a pickle file (name.pkl)
         '''
+        # if path (only the dir part) not exist, create it
+        dir_path = os.path.dirname(path)
+        if not os.path.exists(dir_path):
+            os.makedirs(dir_path)
+
         with open(path, 'wb') as f:
             pickle.dump(self.gradient_dataset, f)
 
@@ -112,6 +127,7 @@ class CorrectionModule:
         self.train_loss = ((self.model.predict(input_grads) - target_grads) ** 2).mean()
         print("[CORRECTION] Training loss (MSE):", self.train_loss)
 
+        # TODO: ADD MAPE HERE!!! since the grad values are very small, MSE is not a good metric!
         # TODO: add MSE threshold here!!! (if MSE is too high, we should not use this model)
 
         # if self.writer is not None:
