@@ -25,12 +25,13 @@ class Aggregator:
         self.faulty_worker_idxs = []
         self.correction_models = {}
 
-    def aggregate(self, gradients_dict, worker_batch_map, verbose=False):
+    def aggregate(self, gradients_dict, worker_batch_map, curr_iter, verbose=False):
         '''
         Aggregate gradients from gradients_dict (avg)
         '''
         self.gradients_dict = gradients_dict
         self.worker_batch_map = worker_batch_map
+        self.curr_iter = curr_iter
 
         self.detect_faulty_gradients()
 
@@ -80,15 +81,20 @@ class Aggregator:
             else, correct faulty gradients
         '''
         for faulty_id, correction_model in self.correction_models.items():
+            self.corrected = True
             if correction_model.model_status != "trained":
                 # add data, if will train if the dataset is large enough
                 correction_model.collect_data(self.gradients_dict[faulty_id], self.gradients_dict[self.worker_batch_map[faulty_id]])
+                self.model_train_at_iter = self.curr_iter
                 # remove faulty gradients
                 del self.gradients_dict[faulty_id]
             else:
-                self.corrected = True
                 # correct faulty gradients
                 self.gradients_dict[faulty_id] = correction_model.correct_gradients(self.gradients_dict[faulty_id], self.model)
+                # if 10 iters passed since last correction, need to retrain
+                if self.curr_iter - self.model_train_at_iter > 10:
+                    correction_model.model_status = "NEED to re-trained"
+                    self.corrected = False # this will tell DDP distributer to re-distribute data
     
     def correction_model_init(self):
         '''
@@ -98,7 +104,7 @@ class Aggregator:
             print("[AGG] Init correction model for worker {}".format(i))
             # self.correction_models[i] = CM(i, self.cmodel, self.tb_log_dir, self.device)
             self.correction_models[i] = CM(worker_id=i, 
-                                           train_at_iter=10, 
+                                           train_at_iter=1, 
                                            model=self.cmodel, 
                                            tb_log_dir=self.tb_log_dir, 
                                            device="cpu", 

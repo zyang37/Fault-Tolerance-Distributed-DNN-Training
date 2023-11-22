@@ -10,9 +10,13 @@ Idealy, this should run on a separate process, to avoid blocking the main proces
 import os
 import torch
 import pickle
+import numpy as np
 from sklearn import svm
 from sklearn import linear_model
 from sklearn.neural_network import MLPRegressor
+# from sklearn.linear_model import LinearRegression
+from sklearn.preprocessing import StandardScaler, MinMaxScaler
+from sklearn.metrics import mean_squared_error, mean_absolute_percentage_error
 from torch.utils.tensorboard import SummaryWriter
 
 seed_value = 1
@@ -22,7 +26,7 @@ class CorrectionModule:
     This class that includes all mechanisms for correction
     It is initialized in aggregation_rules.py
     '''
-    def __init__(self, worker_id, train_at_iter=10, model=None, tb_log_dir=None, device="cpu", data_coll_path=False):
+    def __init__(self, worker_id, train_at_iter=1, model=None, tb_log_dir=None, device="cpu", data_coll_path=False):
         '''
         Note: 
             - data_coll_path: if is a [path], the correction module will only collect data, and not train the correction model
@@ -115,19 +119,34 @@ class CorrectionModule:
         '''
         if self.model is None:
             raise ValueError("Model not initialized")
+
+        # TODO: need update here!!! + std step
         input_grads = self.gradient_dataset['input'][0].reshape(-1, 1)
         target_grads = self.gradient_dataset['target'][0].reshape(-1, 1)
         # print(input_grads[0].shape, target_grads[0].shape)
-        # exit()
+        
+        # std the data
+        data_coverage = 1
+        inputs_std, targets_std, input_scaler, target_scaler = data_standardization(input_grads, target_grads)
+        # input_grads, target_grads = sample_data([inputs_std, targets_std], percent=data_coverage)
 
-        self.model.fit(input_grads, target_grads)
+        self.model.fit(inputs_std, targets_std)
         self.model_status = "trained"
         
         # save training loss (MSE)
-        self.train_loss = ((self.model.predict(input_grads) - target_grads) ** 2).mean()
-        print("[CORRECTION] Training loss (MSE):", self.train_loss)
+        preds = inference(input_grads, self.model, input_scaler, target_scaler)
+        self.train_loss_mse = mean_squared_error(target_grads, preds)
+        self.train_loss_mape = mean_absolute_percentage_error(target_grads+1, preds+1)
+        # self.train_loss = ((self.model.predict(input_grads) - target_grads) ** 2).mean()
+        # print("[CORRECTION] Training loss (MSE):", self.train_loss)
+        print("[CORRECTION] Training loss (MSE, MAPE):", self.train_loss_mse, self.train_loss_mape)
 
-        # TODO: ADD MAPE HERE!!! since the grad values are very small, MSE is not a good metric!
+        self.input_scaler = input_scaler
+        self.target_scaler = target_scaler
+
+        # empty the dataset
+        self.gradient_dataset ={'input':[], 'target':[]}
+
         # TODO: add MSE threshold here!!! (if MSE is too high, we should not use this model)
 
         # if self.writer is not None:
@@ -148,7 +167,8 @@ class CorrectionModule:
         
         # flatten gradients, and pre-processing
         input_flat_grads = self.data_preprocessing(gradients_list)
-        corrected_flat_grads = self.model.predict(input_flat_grads.reshape(-1, 1))
+        # corrected_flat_grads = self.model.predict(input_flat_grads.reshape(-1, 1))
+        corrected_flat_grads = inference(input_flat_grads, self.model, self.input_scaler, self.target_scaler)
 
         # post processing
         # weighted
@@ -159,6 +179,73 @@ class CorrectionModule:
 
 
 # Helper functions
+def sample_data(datalist, sample_size=None, percent=None):
+    '''
+    Sample the data from the datalist
+    args:
+        - datalist: [data1, data2, ...]
+        - data1: numpy array of shape (num_samples, num_features)
+    '''
+    if sample_size is None and percent is None:
+        raise ValueError("Either sample_size or percent must be specified.")
+    elif sample_size is None and percent is not None:
+        # calculate the sample size
+        sample_size = int(datalist[0].shape[0] * percent)
+        # print(sample_size)
+
+    indices = np.random.choice(datalist[0].shape[0], sample_size, replace=False)
+    return [data[indices] for data in datalist]
+
+def data_standardization(inputs, targets):
+    '''
+    Standardize the data
+    args:
+        - datalist: [data1, data2, ...]
+        - data1: numpy array of shape (num_samples, num_features)
+    '''
+    # standardize the dataset
+    input_scaler = MinMaxScaler()
+    target_scaler = MinMaxScaler()
+
+    input_scaler.fit(inputs)
+    inputs_std = input_scaler.transform(inputs)
+
+    target_scaler.fit(targets)
+    targets_std = target_scaler.transform(targets)
+
+    # return inputs_std, targets, input_scaler#, target_scaler
+    return inputs_std, targets_std, input_scaler, target_scaler
+
+def data_destandardization(data, scaler):
+    '''
+    De-standardize the data
+    args:
+        - data: numpy array of shape (num_samples, num_features)
+        - scaler: sklearn.preprocessing.StandardScaler
+    '''
+    return scaler.inverse_transform(data.reshape(-1, 1))
+
+def inference(input_grads, model, input_scaler, target_scaler):
+    '''
+    Inference the model
+    args:
+        - grad_list: list of gradients
+        - model: model
+        - input_scaler: sklearn.preprocessing.StandardScaler
+        - target_scaler: sklearn.preprocessing.StandardScaler
+    '''
+    if len(input_grads.shape) == 1:
+        input_grads = input_grads.reshape(-1, 1)
+
+    # standardize the data
+    input_grads_std = input_scaler.transform(input_grads)
+    # inference
+    pred_std = model.predict(input_grads_std)
+    # de-standardize the data
+    # pred_grads = pred_std.reshape(-1, 1)
+    pred_grads = target_scaler.inverse_transform(pred_std.reshape(-1, 1))
+    return pred_grads
+
 def inspect_model_grads(gradients_list:list):
     '''
     This function is used for debugging purpose, print out the shape of each gradient

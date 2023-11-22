@@ -39,17 +39,17 @@ def worker(idx, model, data, target, gradients_dict, loss_list, optimizer, crite
     if faulty:
         # TODO: current hard coded noise type!!!
 
-        print("yoyooyo")
+        # print("yoyooyo")
         # determ
-        random_scaler = random.randint(10, 100)
-        random_constant = random.randint(10, 100)
-        gradients = [ (p.grad.clone() * random_scaler)+random_constant for p in model.parameters()]
+        # random_scaler = random.randint(2, 10)
+        # random_constant = random.randint(2, 10)
+        gradients = [ (p.grad.clone() * (10)) for p in model.parameters()]
         
         # add gaussian noise to gradients
         # gradients = [p.grad+(torch.randn_like(p.grad.clone())) for p in model.parameters()]
 
         # Random
-        # gradients = [ (torch.randn_like(p.grad.clone()) for p in model.parameters()]
+        # gradients = [ torch.randn_like(p.grad.clone()) for p in model.parameters()]
 
         # gradients = [torch.ones_like(p.grad) * 100000 for p in model.parameters()]
         # convert gradients to numpy array
@@ -93,7 +93,7 @@ def setup_train_job(args):
         else:
             data_loader, test_loader = CIFAR100_dataloader(global_batch_size)
             model = build_model(arch="SimpleCNN", class_number=100)
-        optimizer = optim.Adam(model.parameters(), lr=0.005)
+        optimizer = optim.Adam(model.parameters(), lr=0.001)
         criterion = nn.CrossEntropyLoss()
     elif dataset.lower()=="cifar10":
         if args.arch is not None:
@@ -227,17 +227,19 @@ if __name__ == '__main__':
             # data_sub_batches = divide_into_sub_batches(data_batch, num_sub_batches)
             # target_sub_batches = divide_into_sub_batches(target_batch, num_sub_batches)
             data_sub_batches, target_sub_batches, worker_batch_map = data_distributor.distribute(data_batch, target_batch, corrected)
-            # print(len(data_sub_batches))
+            print("W-B MAP:", worker_batch_map)
             
             faulty = False
             args_list = []
             for i, (data, target) in enumerate(zip(data_sub_batches, target_sub_batches)):
                 data, target = data.to(device), target.to(device)
-            
                 if i in faulty_worker_idxs: faulty = True
                 else: faulty = False
                 args_list.append((i, global_model, data, target, gradients_dict, loss_list, optimizer, criterion, faulty))
+            
             # Multi-processing
+            # with Pool(processes=num_processes) as pool:
+            #     pool.map(parallel_worker_train, args_list)
             # with ThreadPool(processes=num_processes) as pool:
             #     pool.map(parallel_worker_train, args_list)
             # single process
@@ -254,7 +256,7 @@ if __name__ == '__main__':
                 gradients_list = aggregation_rules.mean_filter(gradients_dict)
                 print(len(gradients_list))
             elif defense_method == "pop":
-                print("pop defense (just for testing)")
+                print("pop defense (testing)")
                 gradients_list = aggregation_rules.pop_worker_updates(gradients_dict, 0)
                 # gradients_list = aggregation_rules.pop_one(gradients_list, 0)
                 print(len(gradients_list))
@@ -263,7 +265,7 @@ if __name__ == '__main__':
                 
             # gradients_list = list(gradients_dict.values())
             # aggregated_gradients = aggregation_rules.average_grads(gradients_list)
-            aggregated_gradients, k = aggregator.aggregate(gradients_dict, worker_batch_map)
+            aggregated_gradients, k = aggregator.aggregate(gradients_dict, worker_batch_map, curr_iter=iteration)
             corrected = aggregator.corrected
 
             # adjust learning rate: lr * sqrt(k)
@@ -281,11 +283,11 @@ if __name__ == '__main__':
             # print curr iter / total iter
 
             # infor
-            print("W-B MAP:", worker_batch_map)
             print(f'EP: {epoch+1}/{n_epochs}, sub-batch: {iteration+1}/{len(data_loader)}, avg sub-batch loss: {round(avg_iter_loss, 3)}')
-
-            # validation per 10 iterations
-            if iteration % 30 == 0 and iteration != 0:
+            # exit()
+            # validation per 50% of the dataset, and at the last iteration
+            if iteration % (len(data_loader) // 2) == 0 and iteration != 0 or iteration == len(data_loader) - 1:
+            # if iteration % 30 == 0 and iteration != 0:
                 acc = inference(global_model, test_loader, device)
                 print("validation accuracy:", acc)
                 # Write to tensorboard tag with worker number
