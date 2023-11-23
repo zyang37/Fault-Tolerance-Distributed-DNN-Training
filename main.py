@@ -43,10 +43,10 @@ def worker(idx, model, data, target, gradients_dict, loss_list, optimizer, crite
         # determ
         # random_scaler = random.randint(2, 10)
         # random_constant = random.randint(2, 10)
-        gradients = [ (p.grad.clone() * (10)) for p in model.parameters()]
+        # gradients = [ (p.grad.clone() * (10)) for p in model.parameters()]
         
         # add gaussian noise to gradients
-        # gradients = [p.grad+(torch.randn_like(p.grad.clone())) for p in model.parameters()]
+        gradients = [p.grad+(torch.randn_like(p.grad.clone())) for p in model.parameters()]
 
         # Random
         # gradients = [ torch.randn_like(p.grad.clone()) for p in model.parameters()]

@@ -3,7 +3,6 @@ __pycache__/*
 .idea/*
 .vscode/*
 data/*
-runs/*
 logs/*
 
 */__pycache__/*
@@ -11,6 +10,4 @@ logs/*
 .idea/*
 .vscode/*
 */data/*
-runs/*
 logs/*
-test/
