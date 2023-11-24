@@ -5,6 +5,7 @@ from torch.multiprocessing import Process, Manager
 from torch.utils.data import DataLoader, TensorDataset
 from abc import ABC, abstractmethod
 
+# CURRENTLY NOT USED!!!
 def noisy_gradients_gen(torch_model, mode: int, noise_type: int, noise_scale: float):
     '''
     args:
